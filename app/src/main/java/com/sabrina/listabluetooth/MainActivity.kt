@@ -14,7 +14,6 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
 
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -39,31 +38,54 @@ class MainActivity : AppCompatActivity() {
         adapter = DevicesAdapter()
         recyclerView.adapter = adapter
 
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        val tempAdapter = BluetoothAdapter.getDefaultAdapter()
+        if (tempAdapter != null) {
+            bluetoothAdapter = tempAdapter
+        } else {
+            btnLoadDevices.isEnabled = false
+            return
+        }
 
         btnLoadDevices.setOnClickListener {
             loadPairedDevices()
         }
     }
 
+    // ================= CARGAR DISPOSITIVOS =================
     @SuppressLint("MissingPermission")
     private fun loadPairedDevices() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                 != PackageManager.PERMISSION_GRANTED
             ) {
-                requestPermissions(
-                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                    1
-                )
+                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
                 return
             }
         }
 
-        devices.clear()
-        devices.addAll(bluetoothAdapter.bondedDevices)
+        if (!::bluetoothAdapter.isInitialized || bluetoothAdapter == null) {
+            android.widget.Toast.makeText(this, "Este dispositivo no tiene Bluetooth", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        adapter.notifyDataSetChanged()
+        if (!bluetoothAdapter.isEnabled) {
+            android.widget.Toast.makeText(this, "Activa el Bluetooth para ver dispositivos", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            devices.clear()
+            devices.addAll(bluetoothAdapter.bondedDevices)
+            adapter.notifyDataSetChanged()
+
+            if (devices.isEmpty()) {
+                android.widget.Toast.makeText(this, "No hay dispositivos vinculados", android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+        } catch (e: Exception) {
+            // Evita que la app se cierre si falla el permiso en versiones viejas
+            android.widget.Toast.makeText(this, "Error de permisos Bluetooth", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -81,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ================= ADAPTER =================
     inner class DevicesAdapter :
         RecyclerView.Adapter<DevicesAdapter.DeviceViewHolder>() {
 
@@ -102,32 +125,10 @@ class MainActivity : AppCompatActivity() {
             val device = devices[position]
 
             holder.name.text = device.name ?: "Dispositivo desconocido"
-            holder.details.text = device.address
+            holder.details.text = "MAC: ${device.address}"
             holder.details.setTextColor(Color.GRAY)
-
-            holder.itemView.setOnClickListener {
-                showDeviceDialog(device)
-            }
         }
 
         override fun getItemCount(): Int = devices.size
-    }
-
-    // dialog
-    @SuppressLint("MissingPermission")
-    private fun showDeviceDialog(device: BluetoothDevice) {
-        val view = layoutInflater.inflate(R.layout.dialog_device_details, null)
-
-        view.findViewById<TextView>(R.id.tvDeviceName).text =
-            device.name ?: "Dispositivo desconocido"
-
-        view.findViewById<TextView>(R.id.tvDeviceAddress).text =
-            "MAC: ${device.address}"
-
-        AlertDialog.Builder(this)
-            .setTitle("Detalles del dispositivo")
-            .setView(view)
-            .setPositiveButton("OK", null)
-            .show()
     }
 }
